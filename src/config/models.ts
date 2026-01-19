@@ -1,36 +1,22 @@
 import type { ModelConfig } from '../types';
 
 export const AVAILABLE_MODELS: Record<string, ModelConfig> = {
-  'phi-3-mini': {
-    name: 'Phi-3 Mini',
-    size: '2.3GB',
-    contextWindow: 4096,
-    maxTokens: 128,
-    modelUrl: '/models/phi-3-mini-4k-instruct-q4f16_1.gguf',
-  },
-  'phi-2': {
-    name: 'Phi-2',
-    size: '1.8GB',
+  'qwen2.5-coder-0.5b': {
+    name: 'Qwen2.5-Coder-0.5B',
+    size: '3GB',
     contextWindow: 2048,
-    maxTokens: 128,
-    modelUrl: '/models/phi-2-q4f16_1.gguf',
-  },
-  'qwen1.5-0.5b': {
-    name: 'Qwen1.5-0.5B',
-    size: '0.4GB',
-    contextWindow: 2048,
-    maxTokens: 128,
-    modelUrl: '/models/qwen1.5-0.5b-chat-q4f16_1.gguf',
+    maxTokens: 100,
+    modelUrl: '/models/qwen2.5-coder-0.5b.onnx',
   },
 };
 
-export const DEFAULT_MODEL = 'phi-3-mini';
+export const DEFAULT_MODEL = 'qwen2.5-coder-0.5b';
 
 export const TOKEN_LIMITS = {
-  INPUT_MIN: 100,
+  INPUT_MIN: 0,
   INPUT_MAX: 1000,
-  OUTPUT_MIN: 50,
-  OUTPUT_MAX: 100,
+  OUTPUT_MIN: 25,
+  OUTPUT_MAX: 80,
 } as const;
 
 export const INFERENCE_CONFIG = {

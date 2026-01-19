@@ -1,18 +1,45 @@
 import { useState, useEffect } from 'react';
-import { useLLM } from '../hooks/useLLM';
-import { SimpleTokenizer } from '../utils/tokenizer';
-import { TOKEN_LIMITS } from '../config/models';
-import './SummarizerForm.css';
+import { useCommand } from '../hooks/useCommand';
+import type { CommandRequest, SystemContext } from '../types/command';
+import './SummarizerForm.css'; // Reuse existing styles
+import './CommandForm.css';
 
-export function SummarizerForm() {
-  const { modelStatus, isProcessing, error, loadModel, summarize } = useLLM();
-  const [inputText, setInputText] = useState('');
-  const [summary, setSummary] = useState('');
+export function CommandForm() {
+  const { modelStatus, isProcessing, error, loadModel, generateCommands } = useCommand();
+  const [commands, setCommands] = useState<string[]>([]);
   const [metrics, setMetrics] = useState<any>({
     inferenceTime: 0,
     memoryUsage: 0,
     tokensPerSecond: 0,
   });
+
+  // Auto-detect system context
+  const [systemContext, setSystemContext] = useState<SystemContext>({
+    os: 'Unknown',
+    arch: 'Unknown',
+    shell: 'Unknown',
+    currentDirectory: 'Unknown',
+    installedTools: [],
+  });
+  const [goal, setGoal] = useState('');
+
+  // Auto-detect system info on mount
+  useEffect(() => {
+    const detectSystemContext = () => {
+      const context: SystemContext = {
+        os: navigator.platform.includes('Linux') ? 'Linux' : 
+            navigator.platform.includes('Mac') ? 'macOS' : 
+            navigator.platform.includes('Win') ? 'Windows' : 'Unknown',
+        arch: 'Unknown', // Would need backend detection
+        shell: 'Unknown', // Would need backend detection
+        currentDirectory: window.location.pathname, // Use current path
+        installedTools: [], // Would need backend detection
+      };
+      setSystemContext(context);
+    };
+
+    detectSystemContext();
+  }, []);
 
   // Auto-load model on component mount
   useEffect(() => {
@@ -29,33 +56,27 @@ export function SummarizerForm() {
     }
   }, [loadModel, modelStatus.loaded, modelStatus.loading]);
 
-  const handleSummarize = async () => {
-    if (!inputText.trim()) {
-      alert('Please enter some text to summarize');
-      return;
-    }
-
-    const tokens = SimpleTokenizer.estimateTokens(inputText);
-    if (tokens > TOKEN_LIMITS.INPUT_MAX) {
-      alert(`Input text is too long. Please limit to ${TOKEN_LIMITS.INPUT_MAX} tokens (approximately ${TOKEN_LIMITS.INPUT_MAX * 4} characters).`);
+  const handleGenerate = async () => {
+    if (!goal.trim()) {
+      alert('Please enter a goal');
       return;
     }
 
     try {
-      const result = await summarize({
-        text: inputText,
-        maxLength: TOKEN_LIMITS.OUTPUT_MAX,
-        minLength: TOKEN_LIMITS.OUTPUT_MIN,
-      });
+      const request: CommandRequest = {
+        task: 'Task: Terminal command suggestion',
+        system: systemContext,
+        goal,
+        outputFormat: 'Provide 1–3 terminal commands only.',
+      };
 
-      setSummary(result.summary);
+      const result = await generateCommands(request);
+      setCommands(result.commands);
       setMetrics(result.metrics);
     } catch (err) {
-      console.error('Summarization failed:', err);
+      console.error('Command generation failed:', err);
     }
   };
-
-  const currentTokens = SimpleTokenizer.estimateTokens(inputText);
 
   const getStatusDot = () => {
     if (modelStatus.loading) {
@@ -82,7 +103,7 @@ export function SummarizerForm() {
   return (
     <div className="summarizer-container">
       <div className="header">
-        <h1>WebAssembly LLM Summarizer</h1>
+        <h1>Terminal Command Generator</h1>
         <div className="status-indicator">
           {getStatusDot()}
           <span className="status-text">
@@ -99,32 +120,30 @@ export function SummarizerForm() {
       )}
 
       <div className="main-content">
+        
         <div className="input-section">
-          <h3>Enter Your Text</h3>
+          <h3>What do you want to accomplish?</h3>
           <textarea
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            placeholder="Paste your text here to get a concise summary..."
+            value={goal}
+            onChange={(e) => setGoal(e.target.value)}
+            placeholder="e.g., Install Claude CLI, restart nginx service, create new React app..."
             className="text-input"
             disabled={isProcessing || modelStatus.loading}
           />
-          <div className="token-counter">
-            Tokens: {currentTokens} <span className="token-limits">(Min: {TOKEN_LIMITS.INPUT_MIN}, Max: {TOKEN_LIMITS.INPUT_MAX})</span>
-          </div>
         </div>
 
         <button
-          onClick={handleSummarize}
-          disabled={!inputText.trim() || isProcessing || !modelStatus.loaded || modelStatus.loading}
+          onClick={handleGenerate}
+          disabled={!goal.trim() || isProcessing || !modelStatus.loaded || modelStatus.loading}
           className="summarize-btn"
         >
           {isProcessing ? (
             <>
               <div className="spinner"></div>
-              Processing...
+              Generating...
             </>
           ) : (
-            'Summarize Text'
+            'Generate Commands'
           )}
         </button>
 
@@ -134,10 +153,16 @@ export function SummarizerForm() {
           </div>
         )}
 
-        {summary && (
+        {commands.length > 0 && (
           <div className="result-section">
-            <h3>Summary</h3>
-            <div className="summary-text">{summary}</div>
+            <h3>Suggested Commands</h3>
+            <div className="commands-list">
+              {commands.map((command, index) => (
+                <div key={index} className="command-item">
+                  <code>{command}</code>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

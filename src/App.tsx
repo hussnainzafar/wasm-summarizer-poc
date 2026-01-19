@@ -1,11 +1,11 @@
-import { SummarizerForm } from './components/SummarizerForm'
+import { CommandForm } from './components/CommandForm';
 
 function App() {
   return (
     <div className="App">
-      <SummarizerForm />
+      <CommandForm />
     </div>
-  )
+  );
 }
 
-export default App
+export default App;

@@ -49,23 +49,26 @@ export class LLMService {
       // Load the summarization pipeline using a model that works well with WebAssembly
       // Try models that are known to have proper ONNX support
       let summarizer = null;
+      let loadedModelName = ''; // Track the actual model that loaded
       const modelsToTry = [
-        'Xenova/distilgpt2',  // Small GPT-2 model (124MB) - fastest and lightweight
-        'Xenova/gpt2',  // Standard GPT-2 model (548MB) 
-        'Xenova/gpt2-medium',  // Medium GPT-2 model (1.4GB) - better quality
+        'Xenova/t5-small',  // Seq2Seq model - trained for summarization
+        'Xenova/distilgpt2',  // Small GPT-2 model (124MB) - fallback only
+        'Xenova/gpt2',  // Standard GPT-2 model (548MB) - last resort
       ];
       
       for (const model of modelsToTry) {
         try {
           console.log(`Trying to load model: ${model}`);
-          // Use text-generation pipeline for these models
-          summarizer = await pipeline('text-generation', model, {
+          // Use appropriate pipeline for each model type
+          const pipelineType = model.includes('t5') ? 'summarization' : 'text-generation';
+          summarizer = await pipeline(pipelineType, model, {
             progress_callback: (progress: any) => {
               this.status.progress = Math.round(progress.progress * 100);
             },
             local_files_only: false,
           });
           console.log(`Successfully loaded model: ${model}`);
+          loadedModelName = model; // Store the successful model name
           break;
         } catch (modelError) {
           console.warn(`Failed to load model ${model}:`, modelError);
@@ -84,10 +87,11 @@ export class LLMService {
       const loadMetrics = PerformanceMonitor.endMeasurement();
       loadMetrics.loadTime = loadMetrics.inferenceTime;
 
-      this.currentModel = modelKey;
+      // Track the actual model that loaded, not the config key
+      this.currentModel = loadedModelName;
       this.status = { loaded: true, loading: false, error: null, progress: 100 };
       
-      console.log('Model loaded successfully', { model: modelKey, metrics: loadMetrics });
+      console.log('Model loaded successfully', { model: loadedModelName, metrics: loadMetrics });
     } catch (error) {
       this.status = { loaded: false, loading: false, error: String(error), progress: 0 };
       console.error('Failed to load model:', error);
@@ -106,23 +110,67 @@ export class LLMService {
       request.text = SimpleTokenizer.truncateText(request.text, TOKEN_LIMITS.INPUT_MAX);
     }
 
+    // Preprocess input: reduce repetition and add task prefix for T5
+    let processedText = request.text;
+    if (this.currentModel.includes('t5')) {
+      // Add task prefix for better T5 performance
+      processedText = `Summarize the following text: ${request.text}`;
+      
+      // Remove excessive repetition (simple deduplication)
+      const sentences = processedText.split('. ').filter(s => s.trim());
+      const uniqueSentences = [...new Set(sentences)];
+      processedText = uniqueSentences.join('. ');
+    }
+
     PerformanceMonitor.startMeasurement();
 
     try {
-      // For text-generation models, we need to craft a prompt for summarization
-      const prompt = `Text: ${request.text}\n\nSummary:`;
+      // Use native summarization for T5, or slot-filling for GPT models
+      let result;
+      let prompt = ''; // Define prompt outside the conditional blocks
       
-      const result = await this.summarizer(prompt, {
-        max_new_tokens: request.maxLength || TOKEN_LIMITS.OUTPUT_MAX,
-        temperature: 0.1, // Lower temperature for more coherent output
-        do_sample: false, // Use greedy decoding for better consistency
-        pad_token_id: 50256, // EOS token for most models
-        repetition_penalty: 1.2, // Prevent repetition
-      });
+      if (this.currentModel.includes('t5')) {
+        // T5-small: Better parameters for comprehensive summaries
+        const inputTokens = SimpleTokenizer.estimateTokens(request.text);
+        const dynamicMaxLength = inputTokens > 200 ? 80 : 45; // Balanced length
+        
+        result = await this.summarizer(processedText, {
+          max_length: Math.min(request.maxLength || TOKEN_LIMITS.OUTPUT_MAX, dynamicMaxLength),
+          min_length: Math.max(request.minLength || TOKEN_LIMITS.OUTPUT_MIN, 25),
+          do_sample: false,
+          num_beams: 4,
+          early_stopping: true,
+          length_penalty: 1.2,  // Moderate penalty for balanced output
+        });
+      } else {
+        // GPT models: Constrained paraphrasing to prevent hallucination
+        prompt = `Summarize this text accurately. Use your own words but do not add any information that wasn't in the original:
+
+Text: ${request.text}
+
+Summary:`;
+        
+        result = await this.summarizer(prompt, {
+          max_new_tokens: request.maxLength || TOKEN_LIMITS.OUTPUT_MAX,
+          temperature: 0.3,  // Lower temperature to reduce hallucination
+          do_sample: false,  // Use deterministic output
+          repetition_penalty: 1.2,
+          pad_token_id: 50256,
+        });
+      }
 
       const baseMetrics = PerformanceMonitor.endMeasurement();
-      const generatedText = result[0].generated_text;
-      const summary = generatedText.replace(prompt, '').trim(); // Remove the prompt from the output
+      let summary;
+      
+      if (this.currentModel.includes('t5')) {
+        // T5 returns summary directly
+        summary = result[0].summary_text;
+      } else {
+        // GPT models need prompt removal
+        const generatedText = result[0].generated_text;
+        summary = generatedText.replace(prompt, '').trim(); // Remove the prompt from the output
+      }
+      
       const outputTokens = SimpleTokenizer.estimateTokens(summary);
       
       const metrics: PerformanceMetrics = {
