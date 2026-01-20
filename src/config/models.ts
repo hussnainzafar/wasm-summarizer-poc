@@ -1,16 +1,16 @@
 import type { ModelConfig } from '../types';
 
 export const AVAILABLE_MODELS: Record<string, ModelConfig> = {
-  'qwen2.5-coder-0.5b': {
-    name: 'Qwen2.5-Coder-0.5B',
-    size: '3GB',
-    contextWindow: 2048,
+  'distilgpt2': {
+    name: 'DistilGPT-2',
+    size: '124MB',
+    contextWindow: 1024,
     maxTokens: 100,
-    modelUrl: '/models/qwen2.5-coder-0.5b.onnx',
+    modelUrl: 'Xenova/distilgpt2',
   },
 };
 
-export const DEFAULT_MODEL = 'qwen2.5-coder-0.5b';
+export const DEFAULT_MODEL = 'distilgpt2';
 
 export const TOKEN_LIMITS = {
   INPUT_MIN: 0,

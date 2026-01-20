@@ -35,7 +35,7 @@ export class CommandService {
   }
 
   async loadModel(): Promise<void> {
-    if (this.generator && this.currentModel === 'onnx-community/Qwen2.5-Coder-0.5B-Instruct') {
+    if (this.generator && this.currentModel === 'Xenova/distilgpt2') {
       return;
     }
 
@@ -44,17 +44,17 @@ export class CommandService {
     try {
       PerformanceMonitor.startMeasurement();
       
-      // Try Qwen2.5-Coder first for code generation
+      // Try DistilGPT-2 for command generation
       let generator = null;
       let loadedModelName = '';
       const modelsToTry = [
-        'onnx-community/Qwen2.5-Coder-0.5B-Instruct',  // Only this model
+        'Xenova/distilgpt2',  // DistilGPT-2 model
       ];
       
       for (const model of modelsToTry) {
         try {
           console.log(`Trying to load command model: ${model}`);
-          // Use text-generation for all models
+          // Use text-generation for DistilGPT-2
           generator = await pipeline('text-generation', model, {
             progress_callback: (progress: any) => {
               this.status.progress = Math.round(progress.progress * 100);
@@ -91,22 +91,21 @@ export class CommandService {
     }
   }
 
-  private formatCommandRequest(request: CommandRequest): any[] {
+  private formatCommandRequest(request: CommandRequest): string {
     const { system, goal } = request;
     
-    // Qwen2.5-Coder expects chat format with system and user messages
-    const messages = [
-      {
-        role: "system",
-        content: "You are a terminal command assistant. Generate 1-3 executable shell commands for the given task. Output ONLY commands, one per line, with no explanations or markdown formatting."
-      },
-      {
-        role: "user", 
-        content: `Task: ${goal}\n\nSystem: ${system.os} ${system.arch}\nShell: ${system.shell}\nAvailable tools: ${system.installedTools.join(', ')}\n\nGenerate 1-3 executable shell commands for this task. Output ONLY the commands, one per line.\n\nYour response:`
-      }
-    ];
+    // DistilGPT-2 expects simple text prompt (not chat format)
+    const prompt = `Task: ${goal}
+
+System: ${system.os} ${system.arch}
+Shell: ${system.shell}
+Available tools: ${system.installedTools.join(', ')}
+
+Generate 1-3 executable shell commands for this task. Output ONLY the commands, one per line.
+
+Commands:`;
     
-    return messages;
+    return prompt;
   }
 
   private applyOutputGuardrails(output: string): string[] {
@@ -147,31 +146,19 @@ export class CommandService {
     PerformanceMonitor.startMeasurement();
 
     try {
-      let result;
-      
-      if (this.currentModel.includes('Qwen')) {
-        // Qwen2.5-Coder: text-generation with code-optimized parameters
-        result = await this.generator(formattedInput, {
-          max_new_tokens: 60,
-          temperature: 0.1,   // Low temperature for code
-          do_sample: false,    // Deterministic for commands
-          top_p: 0.9,
-          repetition_penalty: 1.1,
-        });
-      }
+      // DistilGPT-2: text-generation with simple parameters
+      const result = await this.generator(formattedInput, {
+        max_new_tokens: 60,
+        temperature: 0.7,    // Higher temperature for creativity
+        do_sample: true,     // Enable sampling
+        top_p: 0.9,
+        repetition_penalty: 1.1,
+      });
 
       const baseMetrics = PerformanceMonitor.endMeasurement();
-      let rawOutput;
-
-      if (this.currentModel.includes('t5')) {
-        // T5 returns generated text directly
-        rawOutput = result[0].generated_text;
-      } else {
-        // Qwen models need chat template output extraction
-        const generatedText = result[0].generated_text;
-        const lastMessage = generatedText.at(-1);
-        rawOutput = lastMessage ? lastMessage.content : generatedText.replace(JSON.stringify(formattedInput), '').trim();
-      }
+      
+      // DistilGPT-2 returns generated text directly
+      const rawOutput = result[0].generated_text.replace(formattedInput, '').trim();
 
       // Apply output guardrails
       const commands = this.applyOutputGuardrails(rawOutput);
