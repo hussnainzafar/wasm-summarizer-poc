@@ -7,11 +7,6 @@ import './CommandForm.css';
 export function CommandForm() {
   const { modelStatus, isProcessing, error, loadModel, generateCommands } = useCommand();
   const [commands, setCommands] = useState<string[]>([]);
-  const [metrics, setMetrics] = useState<any>({
-    inferenceTime: 0,
-    memoryUsage: 0,
-    tokensPerSecond: 0,
-  });
 
   // Auto-detect system context
   const [systemContext, setSystemContext] = useState<SystemContext>({
@@ -72,7 +67,6 @@ export function CommandForm() {
 
       const result = await generateCommands(request);
       setCommands(result.commands);
-      setMetrics(result.metrics);
     } catch (err) {
       console.error('Command generation failed:', err);
     }
@@ -165,25 +159,6 @@ export function CommandForm() {
             </div>
           </div>
         )}
-
-        {/* Always show metrics card */}
-        <div className="metrics-section">
-          <h3>Performance Metrics</h3>
-          <div className="metrics-grid">
-            <div className="metric-card">
-              <div className="metric-label">Inference Time</div>
-              <div className="metric-value">{metrics.inferenceTime.toFixed(2)}ms</div>
-            </div>
-            <div className="metric-card">
-              <div className="metric-label">Memory Usage</div>
-              <div className="metric-value">{(metrics.memoryUsage / 1024 / 1024).toFixed(2)}MB</div>
-            </div>
-            <div className="metric-card">
-              <div className="metric-label">Tokens/Second</div>
-              <div className="metric-value">{metrics.tokensPerSecond.toFixed(2)}</div>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );
