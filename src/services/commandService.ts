@@ -35,7 +35,7 @@ export class CommandService {
   }
 
   async loadModel(): Promise<void> {
-    if (this.generator && this.currentModel === 'Xenova/distilgpt2') {
+    if (this.generator && this.currentModel === 'Xenova/t5-small') {
       return;
     }
 
@@ -44,18 +44,18 @@ export class CommandService {
     try {
       PerformanceMonitor.startMeasurement();
       
-      // Try DistilGPT-2 for command generation
+      // Try T5-Small for command generation
       let generator = null;
       let loadedModelName = '';
       const modelsToTry = [
-        'Xenova/distilgpt2',  // DistilGPT-2 model
+        'Xenova/t5-small',  // T5-Small model
       ];
       
       for (const model of modelsToTry) {
         try {
           console.log(`Trying to load command model: ${model}`);
-          // Use text-generation for DistilGPT-2
-          generator = await pipeline('text-generation', model, {
+          // Use text2text-generation for T5-Small
+          generator = await pipeline('text2text-generation', model, {
             progress_callback: (progress: any) => {
               this.status.progress = Math.round(progress.progress * 100);
             },
@@ -94,7 +94,7 @@ export class CommandService {
   private formatCommandRequest(request: CommandRequest): string {
     const { system, goal } = request;
     
-    // DistilGPT-2 expects simple text prompt (not chat format)
+    // T5-Small expects simple text prompt for text2text-generation
     const prompt = `Task: ${goal}
 
 System: ${system.os} ${system.arch}
@@ -146,10 +146,10 @@ Commands:`;
     PerformanceMonitor.startMeasurement();
 
     try {
-      // DistilGPT-2: text-generation with simple parameters
+      // T5-Small: text2text-generation with simple parameters
       const result = await this.generator(formattedInput, {
         max_new_tokens: 60,
-        temperature: 0.7,    // Higher temperature for creativity
+        temperature: 0.3,    // Low temperature for consistency
         do_sample: true,     // Enable sampling
         top_p: 0.9,
         repetition_penalty: 1.1,
@@ -157,8 +157,8 @@ Commands:`;
 
       const baseMetrics = PerformanceMonitor.endMeasurement();
       
-      // DistilGPT-2 returns generated text directly
-      const rawOutput = result[0].generated_text.replace(formattedInput, '').trim();
+      // T5-Small returns generated text directly
+      const rawOutput = result[0].generated_text.trim();
 
       // Apply output guardrails
       const commands = this.applyOutputGuardrails(rawOutput);

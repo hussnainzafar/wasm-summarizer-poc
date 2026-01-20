@@ -1,16 +1,16 @@
 import type { ModelConfig } from '../types';
 
 export const AVAILABLE_MODELS: Record<string, ModelConfig> = {
-  'distilgpt2': {
-    name: 'DistilGPT-2',
-    size: '124MB',
-    contextWindow: 1024,
+  't5-small': {
+    name: 'T5-Small',
+    size: '242MB',
+    contextWindow: 512,
     maxTokens: 100,
-    modelUrl: 'Xenova/distilgpt2',
+    modelUrl: 'Xenova/t5-small',
   },
 };
 
-export const DEFAULT_MODEL = 'distilgpt2';
+export const DEFAULT_MODEL = 't5-small';
 
 export const TOKEN_LIMITS = {
   INPUT_MIN: 0,
